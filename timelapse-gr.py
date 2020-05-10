@@ -1,4 +1,5 @@
 import time
+from datetime import datetime
 import os
 import re
 import exifread
@@ -47,12 +48,14 @@ if (ideal_exposure + delta_from_ideal) > exposure > (ideal_exposure - delta_from
     print('shooting photo')
     shoot_photo_auto(3280,2464,filename)
     print (filename +' shot!')
+    auto = True
 else:
     print('exposure is at '+ str(exposure) +'/255 which is outside parameters!')
     ss = get_exif('test.jpg')
     print('camera chose ' + str(round(ss,2)) +' seconds for the shutter speed.')
 
     ss_micro = ss * 1000000
+    iso=100
     while exposure < (ideal_exposure - delta_from_ideal):
         ss_micro *=2
 
@@ -60,7 +63,7 @@ else:
             ss_micro=6000000
         
         print('trying ' + str(round(ss_micro/1000000,2))+' seconds')
-        shoot_photo(ss_micro,100,1296,976,'test.jpg')
+        shoot_photo(ss_micro,iso,1296,976,'test.jpg')
         exposure = check_exposure('test.jpg')
         print('exposure is at '+ str(exposure) +'/255')
 
@@ -69,11 +72,13 @@ else:
 
     if exposure > (ideal_exposure - delta_from_ideal):
         if (ideal_exposure + delta_from_ideal) < exposure: #in case we overshoot our exposure go back a half stop
-            exposure *= 0.75 
-        print('got it!' + str(round(ss_micro/1000000,2))+' seconds')
+            ss_micro *= 0.75 
+            print('overshot a bit. dialing back half a stop to ' + str(round(ss_micro/1000000,2))+' seconds')
+        else:
+            print('got it! ' + str(round(ss_micro/1000000,2))+' seconds')
         filename = str(int(time.time())) + '.jpg'
         print('shooting photo')
-        shoot_photo(ss_micro,100,3280,2464,filename)
+        shoot_photo(ss_micro,iso,3280,2464,filename)
         print (filename +' shot!')
     else:
         print('need to bump iso :(')
@@ -93,8 +98,16 @@ else:
         print('shooting photo')
         shoot_photo(ss_micro,iso,3280,2464,filename)
         print (filename +' shot!')
+    auto = False
 
 end_time=time.time()
+f=open("timelapse-log.txt", "a+")
+timestamp = dateTimeObj = datetime.now()
+if auto:
+    f.write(str(timestamp) + " - with automatic exposure. it took " + str( (end_time-start_time)/60 ) +' decimal minutes\n')
+else:
+     f.write(str(timestamp) + " - with manual exposure - " + str(round(ss_micro/1000000,2)) +" seconds at " + str(iso) +" iso. it took " + str( (end_time-start_time)/60 ) +' decimal minutes\n')
+f.close()
 print('finally done. everything took ' + str( (end_time-start_time)/60 ) +' decimal minutes')
 
 
