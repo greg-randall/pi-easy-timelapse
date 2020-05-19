@@ -3,8 +3,8 @@ from datetime import datetime
 import os
 import re
 import exifread
-#from ftplib import FTP
-#from ftpconfig import * #credentials for ftp. done this way to keep them from getting added to git
+from ftplib import FTP
+from ftpconfig import * #credentials for ftp. done this way to keep them from getting added to git
 
 hdr=False
 
@@ -183,19 +183,21 @@ if auto:
 else:
      f.write(str(timestamp) + ' - with manual exposure. '+ hdr_note + str(round(ss_micro/1000000,2)) +" seconds at " + str(iso) +" iso. it took " + str( (end_time-start_time)/60 ) +' decimal minutes\n')
 f.close()
-print('finally done. everything took ' + str( (end_time-start_time)/60 ) +' decimal minutes')
+print('finally done shooting. everything took ' + str( (end_time-start_time)/60 ) +' decimal minutes')
 
 
-#print('starting ftp')
-#ftp = FTP()
-#ftp.connect(SERVER, PORT)
-#ftp.login(USER, PASS)
-#ftp.set_debuglevel(3)
-#ftp.storbinary('STOR ' + filename, open(filename, 'rb')) #upload the file
-#os.rename(filename, "uploaded/" + filename)
-#ftp.close()
+print('starting ftp')
 
-#os.system('rm info.txt')
-#os.system('rm test_exp.jpg')
-    
+try: 
+    ftp = FTP()
+    ftp.connect(SERVER, PORT)
+    ftp.login(USER, PASS)
+    ftp.set_debuglevel(3)
+    ftp.storbinary('STOR ' + filename, open(filename, 'rb')) #upload the file
+    os.rename(filename, "uploaded/" + filename)
+    ftp.close()
+except:
+    print "\nCould not access " + SERVER + ". Will retry shortly." #if we can't get to the server then list that it failed
 
+os.system('rm info.txt')
+os.system('rm test.jpg')
