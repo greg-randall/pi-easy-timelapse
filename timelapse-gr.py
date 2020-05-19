@@ -6,7 +6,7 @@ import exifread
 #from ftplib import FTP
 #from ftpconfig import * #credentials for ftp. done this way to keep them from getting added to git
 
-hdr=True
+hdr=False
 
 ideal_exposure = 125
 delta_from_ideal = 10
