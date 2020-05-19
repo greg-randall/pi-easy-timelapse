@@ -1,6 +1,7 @@
 import time
 from datetime import datetime
 import os
+import os.path
 import re
 import exifread
 from ftplib import FTP
@@ -13,11 +14,11 @@ delta_from_ideal = 10
 isos = [200, 320, 400, 500, 640, 800] 
 
 def shoot_photo(ss,iso,w,h,filename):
-    os.system('raspistill -ss '+ str(ss) +' -w '+ str(w) +' -h '+ str(h) +' -ISO '+ str(iso) +' -o '+ filename)
+    os.system('raspistill -awb sun  -hf -vf -ss '+ str(ss) +' -w '+ str(w) +' -h '+ str(h) +' -ISO '+ str(iso) +' -o '+ filename)
     return True
 
 def shoot_photo_auto(ev,w,h,filename):
-    command = 'raspistill -ev '+ str(ev) +' -w '+ str(w) +' -h '+ str(h) +' -o '+ filename
+    command = 'raspistill -awb sun  -hf -vf -ev '+ str(ev) +' -w '+ str(w) +' -h '+ str(h) +' -o '+ filename
     #print(command)
     os.system(command)
     return True
@@ -40,15 +41,16 @@ def get_exif(filename):
     return (float(ss_split[0])/float(ss_split[1]))
 
 def create_hdr(output_name):
-    #raspistill -ev 0 -o hdr-test/1.jpg
-    #raspistill -ev 20 -o hdr-test/2.jpg
-    #raspistill -ev -20 -o hdr-test/3.jpg
+    #raspistill  -ev 0 -o hdr-test/1.jpg
+    #raspistill  -ev 20 -o hdr-test/2.jpg
+    #raspistill  -ev -20 -o hdr-test/3.jpg
     #pfsinme *.jpg | pfssize --maxx 600 | pfshdrcalibrate --verbose -r linear --bpp 16 | pfstmo_reinhard05 | pfsout test.jpg
     #sudo apt install ufraw-batch
     os.system( 'pfsinme hdr1.jpg hdr2.jpg hdr3.jpg | pfshdrcalibrate -r linear --bpp 16 | pfstmo_reinhard05 | pfsout '+ output_name )
     return (True)
 
 start_time = time.time()
+
 print('testing exposures!')
 shoot_photo_auto(0,1296,976,'test.jpg')
 exposure = check_exposure('test.jpg')
@@ -77,7 +79,7 @@ if (ideal_exposure + delta_from_ideal) > exposure > (ideal_exposure - delta_from
 else:
     print('exposure is at '+ str(exposure) +'/255 which is outside parameters!')
     ss = get_exif('test.jpg')
-    print('camera chose ' + str(round(ss,2)) +' seconds for the shutter speed.')
+    print('camera chose ' + str(round(ss,3)) +' seconds for the shutter speed.')
 
     ss_micro = ss * 1000000
     iso=100
@@ -87,7 +89,7 @@ else:
         if ss_micro>6000000:
             ss_micro=6000000
         
-        print('trying ' + str(round(ss_micro/1000000,2))+' seconds')
+        print('trying ' + str(round(ss_micro/1000000,3))+' seconds')
         shoot_photo(ss_micro,iso,1296,976,'test.jpg')
         exposure = check_exposure('test.jpg')
         print('exposure is at '+ str(exposure) +'/255')
@@ -97,10 +99,18 @@ else:
 
     if exposure > (ideal_exposure - delta_from_ideal):
         if (ideal_exposure + delta_from_ideal) < exposure: #in case we overshoot our exposure go back a half stop
-            ss_micro *= 0.5 
-            print('overshot a bit. dialing back a bit ' + str(round(ss_micro/1000000,2))+' seconds')
+            #ss_micro *= 0.7 
+            #print('overshot a bit. dialing back a bit ' + str(round(ss_micro/1000000,3))+' seconds')
+            
+            while (ideal_exposure + delta_from_ideal) < exposure:
+                ss_micro *=.75            
+                print('reducing exposure, trying ' + str(round(ss_micro/1000000,3))+' seconds')
+                shoot_photo(ss_micro,iso,1296,976,'test.jpg')
+                exposure = check_exposure('test.jpg')
+                print('exposure is at '+ str(exposure) +'/255')
+
         else:
-            print('got it! ' + str(round(ss_micro/1000000,2))+' seconds')
+            print('got it! ' + str(round(ss_micro/1000000,3))+' seconds')
         filename = str(int(time.time())) + '.jpg'
         if hdr:
             if ss_micro>=6000000:
@@ -171,6 +181,7 @@ else:
 
 end_time=time.time()
 f=open("timelapse-log.txt", "a+")
+
 timestamp = dateTimeObj = datetime.now()
 
 if hdr:
@@ -181,7 +192,7 @@ else:
 if auto:
     f.write(str(timestamp) + ' - with automatic exposure. ' + hdr_note + 'it took ' + str( (end_time-start_time)/60 ) +' decimal minutes\n')
 else:
-     f.write(str(timestamp) + ' - with manual exposure. '+ hdr_note + str(round(ss_micro/1000000,2)) +" seconds at " + str(iso) +" iso. it took " + str( (end_time-start_time)/60 ) +' decimal minutes\n')
+    f.write(str(timestamp) + ' - with manual exposure. '+ hdr_note + str(round(ss_micro/1000000,3)) +" seconds at " + str(iso) +" iso. it took " + str( (end_time-start_time)/60 ) +' decimal minutes\n')
 f.close()
 print('finally done shooting. everything took ' + str( (end_time-start_time)/60 ) +' decimal minutes')
 
