@@ -99,12 +99,11 @@ else:
 
     if exposure > (ideal_exposure - delta_from_ideal):
         if (ideal_exposure + delta_from_ideal) < exposure: #in case we overshoot our exposure go back a half stop
-            #ss_micro *= 0.7 
-            #print('overshot a bit. dialing back a bit ' + str(round(ss_micro/1000000,3))+' seconds')
+            print('overshot a bit. dialing back')
             
             while (ideal_exposure + delta_from_ideal) < exposure:
                 ss_micro *=.75            
-                print('reducing exposure, trying ' + str(round(ss_micro/1000000,3))+' seconds')
+                print('reducing exposure, trying ' + str(round(ss_micro/1000000,5))+' seconds')
                 shoot_photo(ss_micro,iso,1296,976,'test.jpg')
                 exposure = check_exposure('test.jpg')
                 print('exposure is at '+ str(exposure) +'/255')
@@ -180,9 +179,11 @@ else:
     auto = False
 
 end_time=time.time()
-f=open("timelapse-log.txt", "a+")
+f=open("timelapse-log-v2.txt", "a+")
 
 timestamp = dateTimeObj = datetime.now()
+
+final_exposure = check_exposure(filename)
 
 if hdr:
     hdr_note='hdr was enabled. '
@@ -190,9 +191,9 @@ else:
     hdr_note=''
 
 if auto:
-    f.write(str(timestamp) + ' - with automatic exposure. ' + hdr_note + 'it took ' + str( (end_time-start_time)/60 ) +' decimal minutes\n')
+    f.write(str(timestamp) + ',auto,' + str(final_exposure)+',,,'+str( (end_time-start_time)/60 ) +'\n')
 else:
-    f.write(str(timestamp) + ' - with manual exposure. '+ hdr_note + str(round(ss_micro/1000000,3)) +" seconds at " + str(iso) +" iso. it took " + str( (end_time-start_time)/60 ) +' decimal minutes\n')
+    f.write(str(timestamp) + ',manual,' + str(final_exposure)+','+str(ss_micro)+','+str(iso)+','+str( (end_time-start_time)/60 ) +'\n')
 f.close()
 print('finally done shooting. everything took ' + str( (end_time-start_time)/60 ) +' decimal minutes')
 
@@ -205,6 +206,7 @@ try:
     ftp.login(USER, PASS)
     ftp.set_debuglevel(3)
     ftp.storbinary('STOR ' + filename, open(filename, 'rb')) #upload the file
+    ftp.storbinary('STOR timelapse-log-v2.txt', open('timelapse-log-v2.txt', 'rb')) #upload the file
     os.rename(filename, "uploaded/" + filename)
     ftp.close()
 except:
