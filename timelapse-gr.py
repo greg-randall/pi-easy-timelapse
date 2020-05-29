@@ -47,7 +47,7 @@ def get_exif(filename):
 
 
 
-start_time = time.time() #time how long this takes
+start_time = round(time.time(),0) #time how long this takes
 
 #shoot a test exposure
 print('testing exposures!')
@@ -118,10 +118,17 @@ print (filename +' shot! '+ str(final_exposure) +'/255')
 #logging
 f=open("timelapse-log-v2.txt", "a+")
 timestamp = dateTimeObj = datetime.now()
-end_time=time.time()
-f.write(str(timestamp) + ','+ mode +',' + str(final_exposure)+','+str(ss_micro)+','+str(iso)+','+str( (end_time-start_time)/60 ) +','+str(trials)+'\n')
+end_time=round(time.time(),0)
+
+
+seconds_elapsed = end_time-start_time
+
+time_elapsed = str(int((seconds_elapsed-(seconds_elapsed%60))/60))+':'+str(int(seconds_elapsed%60))
+
+
+f.write(str(timestamp) + ','+ mode +',' + str(final_exposure)+','+str(ss_micro)+','+str(iso)+','+ time_elapsed +','+str(trials)+'\n')
 f.close()
-print('finally done shooting. everything took ' + str( (end_time-start_time)/60 ) +' decimal minutes')
+print('finally done shooting. everything took ' + time_elapsed +' minutes:seconds')
 
 
 #print('starting ftp')
