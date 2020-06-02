@@ -4,7 +4,8 @@ import os
 import os.path
 import re
 import exifread
-import math  
+import math
+
 #from ftplib import FTP
 #from ftpconfig import * #credentials for ftp. done this way to keep them from getting added to git
 
@@ -13,13 +14,18 @@ min_shutter_speed = 200 * 1000000 #200 seconds for the hq cam, 6 for v2 cam
 image_x = 4056 #hq cam res
 image_y = 3040
 
+shoot_raw = True
 ideal_exposure = 125
 delta_from_ideal = 10
 isos = [200, 320, 400, 500, 640, 800]
 
 
-def shoot_photo(ss,iso,w,h,filename):
-    os.system('raspistill -n -awb sun -ss '+ str(ss) +' -w '+ str(w) +' -h '+ str(h) +' -ISO '+ str(iso) +' -o '+ filename)
+def shoot_photo(ss,iso,w,h,shoot_raw,filename):
+    if shoot_raw:
+        raw = ' --raw '
+    else:
+        raw = ''
+    os.system('raspistill '+raw+' -n -awb sun -ss '+ str(ss) +' -w '+ str(w) +' -h '+ str(h) +' -ISO '+ str(iso) +' -o '+ filename)
     return True
 
 def shoot_photo_auto(ev,w,h,filename):
@@ -47,7 +53,7 @@ def get_exif(filename):
 
 
 
-start_time = round(time.time(),0) #time how long this takes
+start_time = int(time.time()) #time how long this takes
 
 #shoot a test exposure
 print('testing exposures!')
@@ -101,7 +107,7 @@ else:#have to set exposure manually
             break
         
         print('trying ' + str(round(ss_micro/1000000,3))+' seconds')
-        shoot_photo(ss_micro,iso,1296,976,'test.jpg')
+        shoot_photo(ss_micro,iso,1296,976,False,'test.jpg')
         
         exposure = check_exposure('test.jpg')
         print('results: '+ str(exposure) +'/255')
@@ -117,7 +123,7 @@ print('shooting photo')
 filename = 'hq_'+str(int(time.time())) + '.jpg'
 
 if mode=='manual':
-    shoot_photo(ss_micro,iso,image_x,image_y,filename)
+    shoot_photo(ss_micro,iso,image_x,image_y,True,filename)
 else:
     shoot_photo_auto(0,image_x,image_y,filename)
     
@@ -127,7 +133,7 @@ print (filename +' shot! '+ str(final_exposure) +'/255')
 #logging
 f=open("timelapse-log-v2.txt", "a+")
 timestamp = dateTimeObj = datetime.now()
-end_time=round(time.time(),0)
+end_time=int(time.time())
 
 
 seconds_elapsed = end_time-start_time
@@ -140,7 +146,17 @@ f.close()
 print('---------------------------------------------')
 
 print('finally done shooting. everything took ' + time_elapsed +' minutes:seconds')
+if shoot_raw:
+    print('extracting DNG!')
+    command = 'python3 PyDNG/examples/utility.py ' + filename
+    print(command)
+    os.system(command)
 
+    print('extracted. removing dng from jpg')
+    os.system('convert '+filename+' '+filename)
+    
+
+    
 
 #print('starting ftp')
 
