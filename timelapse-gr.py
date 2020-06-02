@@ -74,7 +74,7 @@ else:#have to set exposure manually
     
     print('---------------------------------------------')
     trials = 1
-    while (ideal_exposure + delta_from_ideal) > exposure > (ideal_exposure - delta_from_ideal): #while the exposure is unacceptable try new exposures
+    while (ideal_exposure + delta_from_ideal) < exposure or exposure < (ideal_exposure - delta_from_ideal): #while the exposure is unacceptable try new exposures
         
         if exposure<=0:
             exposure=1
@@ -115,7 +115,6 @@ else:#have to set exposure manually
         
 print('shooting photo')
 filename = 'hq_'+str(int(time.time())) + '.jpg'
-print(mode)
 
 if mode=='manual':
     shoot_photo(ss_micro,iso,image_x,image_y,filename)
