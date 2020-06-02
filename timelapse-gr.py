@@ -67,35 +67,44 @@ else:#have to set exposure manually
     print('exposure is at '+ str(exposure) +'/255 which is outside parameters!')
     ss = get_exif('test.jpg') #getting exif shutter speed 
     print('camera chose ' + str(round(ss,3)) +' seconds for the shutter speed.')
-    print('---------------------------------------------')
     ss_micro = ss * 1000000
     iso=100
+
+
+    
+    print('---------------------------------------------')
     trials = 1
-    while exposure < (ideal_exposure - delta_from_ideal) or exposure > (ideal_exposure + delta_from_ideal): #while the exposure is unacceptable try new exposures
-        print ('trial ' +str(trials))
-        adj=(1-math.log(exposure,125))*25
-        if adj<1.25 and adj>=0:
-            adj=1.25
-        elif adj>-1.25 and adj<0:
-            adj=-1.25
+    while (ideal_exposure + delta_from_ideal) > exposure > (ideal_exposure - delta_from_ideal): #while the exposure is unacceptable try new exposures
         
+        if exposure<=0:
+            exposure=1
+        
+        adj=(1-math.log(exposure,125))*25
+        
+        print (str(trials)+':')      
         if adj>=0: #exposure is too dark
-            print ('too dark! adjusting by multipliying '+str(round(adj,2)))
+            if adj<1.25:
+                adj=1.25
+            print ('too dark! multipliying shutter speed by '+str(round(adj,2)))
             ss_micro = adj*ss_micro
         else: #exposure is too light
-            print ('too light! adjusting by dividing '+str(round(adj,2)))
+            if adj>-1.25:
+                adj=-1.25
+            print ('too light! dividing shutter speed by '+str(round(adj,2)))
             ss_micro = ss_micro/abs(adj)
            
-        print('trying ' + str(round(ss_micro/1000000,3))+' seconds')
-        shoot_photo(ss_micro,iso,1296,976,'test.jpg')
+        
+
         if ss_micro>=min_shutter_speed:
-            
             ss_micro=min_shutter_speed
-            print('min shutter speed hit- ' + str(round(ss_micro/1000000,3)) +' seconds')
+            print('min shutter speed hit - ' + str(round(ss_micro/1000000,3)) +' seconds')
             break
         
+        print('trying ' + str(round(ss_micro/1000000,3))+' seconds')
+        shoot_photo(ss_micro,iso,1296,976,'test.jpg')
+        
         exposure = check_exposure('test.jpg')
-        print('new exposure '+ str(exposure) +'/255')
+        print('results: '+ str(exposure) +'/255')
         
 
         trials+=1
@@ -106,12 +115,13 @@ else:#have to set exposure manually
         
 print('shooting photo')
 filename = 'hq_'+str(int(time.time())) + '.jpg'
-if mode=='automatic':
-    print('auto')
-    shoot_photo_auto(0,image_x,image_y,filename)
-else:
-    print('manual')
+print(mode)
+
+if mode=='manual':
     shoot_photo(ss_micro,iso,image_x,image_y,filename)
+else:
+    shoot_photo_auto(0,image_x,image_y,filename)
+    
 final_exposure = check_exposure(filename)
 print (filename +' shot! '+ str(final_exposure) +'/255')
 
@@ -128,6 +138,8 @@ time_elapsed = str(int((seconds_elapsed-(seconds_elapsed%60))/60))+':'+str(int(s
 
 f.write(str(timestamp) + ','+ mode +',' + str(final_exposure)+','+str(ss_micro)+','+str(iso)+','+ time_elapsed +','+str(trials)+'\n')
 f.close()
+print('---------------------------------------------')
+
 print('finally done shooting. everything took ' + time_elapsed +' minutes:seconds')
 
 
