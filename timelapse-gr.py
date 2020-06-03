@@ -2,9 +2,11 @@ import time
 from datetime import datetime
 import os
 import os.path
+from os import path
 import re
 import exifread
 import math
+import mmap
 
 #from ftplib import FTP
 #from ftpconfig import * #credentials for ftp. done this way to keep them from getting added to git
@@ -15,7 +17,7 @@ image_x = 4056 #hq cam res
 image_y = 3040
 
 shoot_raw = True
-ideal_exposure = 125
+ideal_exposure = 100
 delta_from_ideal = 10
 isos = [200, 320, 400, 500, 640, 800]
 
@@ -28,9 +30,12 @@ def shoot_photo(ss,iso,w,h,shoot_raw,filename):
     os.system('raspistill '+raw+' -n -awb sun -ss '+ str(ss) +' -w '+ str(w) +' -h '+ str(h) +' -ISO '+ str(iso) +' -o '+ filename)
     return True
 
-def shoot_photo_auto(ev,w,h,filename):
-    command = 'raspistill -n -awb sun -ev '+ str(ev) +' -w '+ str(w) +' -h '+ str(h) +' -o '+ filename
-    #print(command)
+def shoot_photo_auto(ev,w,h,shoot_raw,filename):
+    if shoot_raw:
+        raw = ' --raw '
+    else:
+        raw = ''
+    command = 'raspistill '+raw+' -n -awb sun -ev '+ str(ev) +' -w '+ str(w) +' -h '+ str(h) +' -o '+ filename
     os.system(command)
     return True
 
@@ -51,33 +56,63 @@ def get_exif(filename):
     f.close()
     return (float(ss_split[0])/float(ss_split[1]))
 
+def getlastline(fname):
+    with open(fname) as source:
+        mapping = mmap.mmap(source.fileno(), 0, prot=mmap.PROT_READ)
+    return mapping[mapping.rfind(b'\n',0,-1)+1:]
 
 
 start_time = int(time.time()) #time how long this takes
 
-#shoot a test exposure
-print('testing exposures!')
-shoot_photo_auto(0,1296,976,'test.jpg')
-exposure = check_exposure('test.jpg')
+print('testing exposures! we want to be as close to ' +str(ideal_exposure)+'/255 as possible.')
+
+if path.exists('log.txt'):
+    print('log file found, checking for previous exposure data')
+    previous_settings=str(getlastline('log.txt'))
+    previous_settings = previous_settings.split(',')
+    #print(previous_settings)
+    if previous_settings[1]=='automatic':
+        print('previous exposure was automatic, going to do that again')
+        shoot_photo_auto(0,1296,976,False,'test.jpg')
+        exposure = check_exposure('test.jpg')
+        try_previous=False
+    else:
+        p_ss_micro=int(previous_settings[3])
+        p_iso=int(previous_settings[4])
+        shoot_photo(p_ss_micro,p_iso,1296,976,False,'test.jpg')
+        exposure = check_exposure('test.jpg')
+        print('previous exposure was manual, trying previous settings '+ str(round(p_ss_micro/1000000,3)) +' seconds at '+str(p_iso))
+        print('exposure is '+ str(exposure) +'/255')
+        try_previous=True
+    
+else:
+    print('no previous exposures foud, testing')
+    shoot_photo_auto(0,1296,976,False,'test.jpg')
+    exposure = check_exposure('test.jpg')
+    try_previous=False
+
 
 #see if the test exposure is inside of parameters
-if (ideal_exposure + delta_from_ideal) > exposure > (ideal_exposure - delta_from_ideal):
+if (ideal_exposure + delta_from_ideal) > exposure > (ideal_exposure - delta_from_ideal) and not try_previous:
     mode='automatic'
     print('exposure is '+ str(exposure) +'/255 which is within parameters!')
     ss_micro=''
     iso=''
     trials=''
 else:#have to set exposure manually
-    
     mode='manual'
-    print('exposure is at '+ str(exposure) +'/255 which is outside parameters!')
-    ss = get_exif('test.jpg') #getting exif shutter speed 
-    print('camera chose ' + str(round(ss,3)) +' seconds for the shutter speed.')
-    ss_micro = ss * 1000000
-    iso=100
-
-
+    min_exposure_first_try=True
     
+    if try_previous:
+        ss_micro = p_ss_micro
+        iso=p_iso       
+    else:
+        print('exposure is at '+ str(exposure) +'/255 which is outside parameters!')
+        ss = get_exif('test.jpg') #getting exif shutter speed 
+        print('camera chose ' + str(round(ss,3)) +' seconds for the shutter speed.')
+        ss_micro = ss * 1000000
+        iso=100
+
     print('---------------------------------------------')
     trials = 1
     while (ideal_exposure + delta_from_ideal) < exposure or exposure < (ideal_exposure - delta_from_ideal): #while the exposure is unacceptable try new exposures
@@ -85,7 +120,7 @@ else:#have to set exposure manually
         if exposure<=0:
             exposure=1
         
-        adj=(1-math.log(exposure,125))*25
+        adj=(1-math.log(exposure,ideal_exposure))*12
         
         print (str(trials)+':')      
         if adj>=0: #exposure is too dark
@@ -101,8 +136,11 @@ else:#have to set exposure manually
            
         
 
-        if ss_micro>=min_shutter_speed:
+        if ss_micro>=min_shutter_speed: #in case the minimum exposure is met set it to the minimum
             ss_micro=min_shutter_speed
+            min_exposure_first_try = False #only let that happen once though, 
+        
+        if not min_exposure_first_try:
             print('min shutter speed hit - ' + str(round(ss_micro/1000000,3)) +' seconds')
             break
         
@@ -125,13 +163,23 @@ filename = 'hq_'+str(int(time.time())) + '.jpg'
 if mode=='manual':
     shoot_photo(ss_micro,iso,image_x,image_y,True,filename)
 else:
-    shoot_photo_auto(0,image_x,image_y,filename)
+    shoot_photo_auto(0,image_x,image_y,True,filename)
     
 final_exposure = check_exposure(filename)
 print (filename +' shot! '+ str(final_exposure) +'/255')
 
+print('---------------------------------------------')
+if shoot_raw:
+    print('extracting DNG!')
+    command = 'python3 PyDNG/examples/utility.py ' + filename
+    #print(command)
+    os.system(command)
+
+    print('extracted. removing dng from jpg')
+    os.system('convert '+filename+' '+filename)
+    print('---------------------------------------------')
 #logging
-f=open("timelapse-log-v2.txt", "a+")
+f=open("log.txt", "a+")
 timestamp = dateTimeObj = datetime.now()
 end_time=int(time.time())
 
@@ -141,22 +189,11 @@ seconds_elapsed = end_time-start_time
 time_elapsed = str(int((seconds_elapsed-(seconds_elapsed%60))/60))+':'+str(int(seconds_elapsed%60))
 
 
-f.write(str(timestamp) + ','+ mode +',' + str(final_exposure)+','+str(ss_micro)+','+str(iso)+','+ time_elapsed +','+str(trials)+'\n')
+f.write(str(timestamp) + ','+ mode +',' + str(final_exposure)+','+str(int(ss_micro))+','+str(iso)+','+ time_elapsed +','+str(trials)+'\n')
 f.close()
-print('---------------------------------------------')
 
-print('finally done shooting. everything took ' + time_elapsed +' minutes:seconds')
-if shoot_raw:
-    print('extracting DNG!')
-    command = 'python3 PyDNG/examples/utility.py ' + filename
-    print(command)
-    os.system(command)
 
-    print('extracted. removing dng from jpg')
-    os.system('convert '+filename+' '+filename)
-    
-
-    
+print('finally done shooting. everything took ' + time_elapsed +' minutes:seconds')    
 
 #print('starting ftp')
 
