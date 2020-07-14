@@ -8,18 +8,25 @@ import exifread
 import math
 import mmap
 
-#from ftplib import FTP
-#from ftpconfig import * #credentials for ftp. done this way to keep them from getting added to git
+from ftplib import FTP
+from ftpconfig import * #credentials for ftp. done this way to keep them from getting added to git
 
 
-min_shutter_speed = 200 * 1000000 #200 seconds for the hq cam, 6 for v2 cam
-image_x = 4056 #hq cam res
-image_y = 3040
+#min_shutter_speed = 200 * 1000000 #200 seconds for the hq cam
+#image_x = 4056 #hq cam res
+#image_y = 3040
+
+min_shutter_speed = 6 * 1000000 #6seconds for v2 cam
+image_x = 3280 #v2 cam res
+image_y = 2464
+
 
 shoot_raw = True
-ideal_exposure = 100
+ideal_exposure = 120
 delta_from_ideal = 10
 isos = [200, 320, 400, 500, 640, 800]
+minimum_adjustment_multiplier = 1.33 
+
 
 
 def shoot_photo(ss,iso,w,h,shoot_raw,filename):
@@ -27,7 +34,7 @@ def shoot_photo(ss,iso,w,h,shoot_raw,filename):
         raw = ' --raw '
     else:
         raw = ''
-    os.system('raspistill '+raw+' -n -awb sun -ss '+ str(ss) +' -w '+ str(w) +' -h '+ str(h) +' -ISO '+ str(iso) +' -o '+ filename)
+    os.system(f"raspistill {raw} -hf -vf -n -awb sun -ss {ss} -w {w} -h {h} -ISO {iso} -o {filename}")
     return True
 
 def shoot_photo_auto(ev,w,h,shoot_raw,filename):
@@ -35,12 +42,11 @@ def shoot_photo_auto(ev,w,h,shoot_raw,filename):
         raw = ' --raw '
     else:
         raw = ''
-    command = 'raspistill '+raw+' -n -awb sun -ev '+ str(ev) +' -w '+ str(w) +' -h '+ str(h) +' -o '+ filename
-    os.system(command)
+    os.system(f"raspistill {raw} -hf -vf -n -awb sun -ev {ev} -w {w} -h {h} -o {filename}")
     return True
 
 def check_exposure (filename):
-    os.system('convert '+ filename +' -set colorspace Gray -resize 1x1 -format %c histogram:info:- > info.txt')
+    os.system(f"convert {filename} -set colorspace Gray -resize 1x1 -format %c histogram:info:- > info.txt")
     f = open('info.txt','r')
     exposure = f.read()
     f.close()
@@ -64,11 +70,11 @@ def getlastline(fname):
 
 start_time = int(time.time()) #time how long this takes
 
-print('testing exposures! we want to be as close to ' +str(ideal_exposure)+'/255 as possible.')
+print(f"testing exposures! we want to be as close to {ideal_exposure}/255 as possible.")
 
-if path.exists('log.txt'):
+if path.exists('log_v3.txt'):
     print('log file found, checking for previous exposure data')
-    previous_settings=str(getlastline('log.txt'))
+    previous_settings=str(getlastline('log_v3.txt'))
     previous_settings = previous_settings.split(',')
     #print(previous_settings)
     if previous_settings[1]=='automatic':
@@ -77,12 +83,12 @@ if path.exists('log.txt'):
         exposure = check_exposure('test.jpg')
         try_previous=False
     else:
-        p_ss_micro=int(previous_settings[3])
+        p_ss_micro=int(float(previous_settings[3]))
         p_iso=int(previous_settings[4])
         shoot_photo(p_ss_micro,p_iso,1296,976,False,'test.jpg')
         exposure = check_exposure('test.jpg')
-        print('previous exposure was manual, trying previous settings '+ str(round(p_ss_micro/1000000,3)) +' seconds at '+str(p_iso))
-        print('exposure is '+ str(exposure) +'/255')
+        print(f"previous exposure was manual, trying previous settings {round(p_ss_micro/1000000,3)} seconds at {p_iso}")
+        print(f"exposure is {exposure}/255")
         try_previous=True
     
 else:
@@ -95,7 +101,7 @@ else:
 #see if the test exposure is inside of parameters
 if (ideal_exposure + delta_from_ideal) > exposure > (ideal_exposure - delta_from_ideal) and not try_previous:
     mode='automatic'
-    print('exposure is '+ str(exposure) +'/255 which is within parameters!')
+    print(f"exposure is {exposure}/255 which is within parameters!")
     ss_micro=''
     iso=''
     trials=''
@@ -107,9 +113,9 @@ else:#have to set exposure manually
         ss_micro = p_ss_micro
         iso=p_iso       
     else:
-        print('exposure is at '+ str(exposure) +'/255 which is outside parameters!')
+        print(f"exposure is {exposure}/255 which is within parameters!")
         ss = get_exif('test.jpg') #getting exif shutter speed 
-        print('camera chose ' + str(round(ss,3)) +' seconds for the shutter speed.')
+        print(f"camera chose {round(ss,3)} seconds for the shutter speed.")
         ss_micro = ss * 1000000
         iso=100
 
@@ -122,16 +128,16 @@ else:#have to set exposure manually
         
         adj=(1-math.log(exposure,ideal_exposure))*12
         
-        print (str(trials)+':')      
+        print (f"{trials}:")      
         if adj>=0: #exposure is too dark
-            if adj<1.25:
-                adj=1.25
-            print ('too dark! multipliying shutter speed by '+str(round(adj,2)))
+            if adj<minimum_adjustment_multiplier:
+                adj=minimum_adjustment_multiplier
+            print (f"too dark! multipliying shutter speed by {round(adj,2)}")
             ss_micro = adj*ss_micro
         else: #exposure is too light
-            if adj>-1.25:
-                adj=-1.25
-            print ('too light! dividing shutter speed by '+str(round(adj,2)))
+            if adj>(minimum_adjustment_multiplier*-1):
+                adj=(minimum_adjustment_multiplier*-1)
+            print (f"too light! dividing shutter speed by {round(adj,2)}")
             ss_micro = ss_micro/abs(adj)
            
         
@@ -141,14 +147,14 @@ else:#have to set exposure manually
             min_exposure_first_try = False #only let that happen once though, 
         
         if not min_exposure_first_try:
-            print('min shutter speed hit - ' + str(round(ss_micro/1000000,3)) +' seconds')
+            print(f"min shutter speed hit - {round(ss_micro/1000000,3)} seconds")
             break
         
-        print('trying ' + str(round(ss_micro/1000000,3))+' seconds')
+        print(f"trying {round(ss_micro/1000000,3)} seconds")
         shoot_photo(ss_micro,iso,1296,976,False,'test.jpg')
         
         exposure = check_exposure('test.jpg')
-        print('results: '+ str(exposure) +'/255')
+        print(f"results: {exposure}/255")
         
 
         trials+=1
@@ -158,7 +164,11 @@ else:#have to set exposure manually
         print('---------------------------------------------')
         
 print('shooting photo')
-filename = 'hq_'+str(int(time.time())) + '.jpg'
+filename_time = int(time.time())
+filename = f"{filename_time}.jpg"
+filename_dng = f"{filename_time}.dng"
+
+
 
 if mode=='manual':
     shoot_photo(ss_micro,iso,image_x,image_y,True,filename)
@@ -166,48 +176,55 @@ else:
     shoot_photo_auto(0,image_x,image_y,True,filename)
     
 final_exposure = check_exposure(filename)
-print (filename +' shot! '+ str(final_exposure) +'/255')
+print (f"{filename} shot! {final_exposure}/255")
 
 print('---------------------------------------------')
 if shoot_raw:
     print('extracting DNG!')
-    command = 'python3 PyDNG/examples/utility.py ' + filename
-    #print(command)
+    command = f"python3 PyDNG/examples/utility.py {filename}"
     os.system(command)
 
     print('extracted. removing dng from jpg')
-    os.system('convert '+filename+' '+filename)
+    os.system(f"convert {filename} {filename}")
     print('---------------------------------------------')
 #logging
-f=open("log.txt", "a+")
+f=open("log_v3.txt", "a+")
 timestamp = dateTimeObj = datetime.now()
 end_time=int(time.time())
 
 
 seconds_elapsed = end_time-start_time
 
-time_elapsed = str(int((seconds_elapsed-(seconds_elapsed%60))/60))+':'+str(int(seconds_elapsed%60))
+time_elapsed = f"{(seconds_elapsed-(seconds_elapsed%60))/60}:{seconds_elapsed%60}"
 
 
-f.write(str(timestamp) + ','+ mode +',' + str(final_exposure)+','+str(int(ss_micro))+','+str(iso)+','+ time_elapsed +','+str(trials)+'\n')
+f.write(f"{timestamp},{mode},{final_exposure},{ss_micro},{iso},{time_elapsed},{trials}\n")
 f.close()
 
 
-print('finally done shooting. everything took ' + time_elapsed +' minutes:seconds')    
+print(f"finally done shooting. everything took {time_elapsed} minutes:seconds")    
 
-#print('starting ftp')
+print('starting ftp')
 
-#try: 
-#    ftp = FTP()
-#    ftp.connect(SERVER, PORT)
-#    ftp.login(USER, PASS)
-#    ftp.set_debuglevel(3)
-#    ftp.storbinary('STOR ' + filename, open(filename, 'rb')) #upload the file
-#    ftp.storbinary('STOR timelapse-log-v2.txt', open('timelapse-log-v2.txt', 'rb')) #upload the file
-#    os.rename(filename, "uploaded/" + filename)
-#    ftp.close()
-#except:
-#    print "\nCould not access " + SERVER + ". Will retry shortly." #if we can't get to the server then list that it failed
+
+try: 
+    ftp = FTP()
+    ftp.connect(SERVER, PORT)
+    ftp.login(USER, PASS)
+    ftp.set_debuglevel(3)
+    ftp.storbinary('STOR ' + filename, open(filename, 'rb')) #upload the file
+    ftp.storbinary('STOR ' + filename_dng, open(filename_dng, 'rb')) #upload the file
+    ftp.storbinary('STOR log_v3.txt', open('log_v3.txt', 'rb')) #upload the file
+    ftp.close()
+    ftp_worked=True
+except:
+    print (f"Could not access {SERVER}.") #if we can't get to the server then list that it failed
+    ftp_worked=False
+
+if ftp_worked:
+    print(f"ftp worked, deleting local image copies {filename} & {filename_dng}")
+    os.system(f"rm {filename}")
+    os.system(f"rm {filename_dng}")
 
 os.system('rm info.txt')
 os.system('rm test.jpg')
