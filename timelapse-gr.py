@@ -208,9 +208,7 @@ print('starting ftp')
 
 
 try: 
-    ftp = FTP()
-    ftp.connect(SERVER, PORT)
-    ftp.login(USER, PASS)
+    ftp = FTP(SERVER, USER, PASS, timeout=15)
     ftp.set_debuglevel(3)
     ftp.storbinary('STOR ' + filename, open(filename, 'rb')) #upload the file
     ftp.storbinary('STOR ' + filename_dng, open(filename_dng, 'rb')) #upload the file
