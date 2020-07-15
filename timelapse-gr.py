@@ -11,11 +11,12 @@ import mmap
 from ftplib import FTP
 from ftpconfig import * #credentials for ftp. done this way to keep them from getting added to git
 
-
+#settings for hq cam
 #min_shutter_speed = 200 * 1000000 #200 seconds for the hq cam
 #image_x = 4056 #hq cam res
 #image_y = 3040
 
+#settings for v2 cam
 min_shutter_speed = 6 * 1000000 #6seconds for v2 cam
 image_x = 3280 #v2 cam res
 image_y = 2464
@@ -70,7 +71,9 @@ def getlastline(fname):
 
 start_time = int(time.time()) #time how long this takes
 
+
 print(f"testing exposures! we want to be as close to {ideal_exposure}/255 as possible.")
+
 
 if path.exists('log_v3.txt'):
     print('log file found, checking for previous exposure data')
@@ -121,6 +124,7 @@ else:#have to set exposure manually
 
     print('---------------------------------------------')
     trials = 1
+    min_exposure_hit = False
     while (ideal_exposure + delta_from_ideal) < exposure or exposure < (ideal_exposure - delta_from_ideal): #while the exposure is unacceptable try new exposures
         
         if exposure<=0:
@@ -148,6 +152,7 @@ else:#have to set exposure manually
         
         if not min_exposure_first_try:
             print(f"min shutter speed hit - {round(ss_micro/1000000,3)} seconds")
+            min_exposure_hit = True
             break
         
         print(f"trying {round(ss_micro/1000000,3)} seconds")
@@ -161,8 +166,22 @@ else:#have to set exposure manually
         if trials>=5:
             print('breaking after 5 trials')
             break
-        print('---------------------------------------------')
-        
+
+    if exposure < (ideal_exposure - delta_from_ideal) and min_shutter_speed==ss_micro:
+        print('need to bump iso :(')
+        for iso in isos:
+            print (f"trying {iso} iso at {round(ss_micro/1000000,3)} seconds")
+            shoot_photo(ss_micro,iso,1296,976,False,'test.jpg')
+            exposure = check_exposure('test.jpg')
+            print(f"exposure is at {exposure}/255")
+            if exposure > (ideal_exposure - delta_from_ideal):
+                print(f"workable iso discovered {iso}")
+                break
+        #if the loop ends without finding an iso, it'll just shoot a shot with the highest iso.
+        if iso==isos[-1]:
+            print('highest iso & longest shutter speed hit. going to shoot a photo anyway') 
+print('---------------------------------------------')
+
 print('shooting photo')
 filename_time = int(time.time())
 filename = f"{filename_time}.jpg"
@@ -203,7 +222,7 @@ f.close()
 
 
 print(f"finally done shooting. everything took {time_elapsed} minutes:seconds")    
-
+print('---------------------------------------------')
 print('starting ftp')
 
 
@@ -218,7 +237,7 @@ try:
 except:
     print (f"Could not access {SERVER}.") #if we can't get to the server then list that it failed
     ftp_worked=False
-
+print('---------------------------------------------')
 if ftp_worked:
     print(f"ftp worked, deleting local image copies {filename} & {filename_dng}")
     os.system(f"rm {filename}")
